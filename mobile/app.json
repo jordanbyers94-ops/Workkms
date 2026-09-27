@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Work kms",
+    "slug": "work-kms",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "au.com.ausairelectrical.workkms",
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["location"],
+        "NSLocationWhenInUseUsageDescription": "Work kms uses your location to measure the distance of work trips you start.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Work kms keeps measuring a work trip you started while your phone is locked or you're using other apps. It stops as soon as you finish the trip."
+      }
+    },
+    "android": {
+      "package": "au.com.ausairelectrical.workkms",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Work kms keeps measuring a work trip you started while your phone is locked or you're using other apps. It stops as soon as you finish the trip.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "work-kms",
+  "private": true,
+  "description": "Work kms: Express API + React/Vite office dashboard, deployed as one Railway service",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "npm ci --prefix server --omit=dev && npm ci --prefix dashboard && npm run build --prefix dashboard",
+    "start": "node server/src/index.js",
+    "dev:server": "npm run dev --prefix server",
+    "dev:dashboard": "npm run dev --prefix dashboard",
+    "create-admin": "node server/scripts/create-admin.js"
+  }
+}
