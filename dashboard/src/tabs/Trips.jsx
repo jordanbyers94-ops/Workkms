@@ -48,15 +48,31 @@ export default function Trips({ staff, vehicles, settings, reloadShared }) {
   const total = live.reduce((s, t) => s + t.km, 0);
   const gpsShare = live.length ? Math.round((100 * live.filter((t) => t.source === "gps").length) / live.length) : 0;
 
+  const atoRate = Number(settings.ato_rate ?? 0.91) || 0;
+  const CAP = 5000;
+
+  // Per person: split pay into the part within the ATO rate and the first 5,000 business km
+  // of the financial year (no withholding), and the rest (withholding may apply).
   const byPerson = useMemo(() => {
+    const periodStart = month ? `${month}-01` : `${fy}-07-01`;
     const m = new Map();
     for (const t of live) {
-      const r = m.get(t.user_id) ?? { trips: 0, km: 0, gps: 0, edited: 0 };
+      const r = m.get(t.user_id) ?? { trips: 0, km: 0, gps: 0, edited: 0, noOdo: 0 };
       r.trips++; r.km += t.km; if (t.source === "gps") r.gps++; if (isEdited(t)) r.edited++;
+      if (t.start_odo == null || t.end_odo == null) r.noOdo++;
       m.set(t.user_id, r);
     }
+    for (const [id, r] of m) {
+      const before = trips.filter((t) => !t.deleted && t.user_id === id && t.trip_date < periodStart).reduce((s, t) => s + t.km, 0);
+      const within = Math.max(0, Math.min(r.km, CAP - before));
+      r.fytd = before + r.km;
+      r.pay = r.km * rate;
+      r.noWithholding = within * Math.min(rate, atoRate);
+      r.withholding = r.pay - r.noWithholding;
+    }
     return [...m.entries()].sort((a, b) => b[1].km - a[1].km);
-  }, [live]);
+  }, [live, trips, month, fy, rate, atoRate]);
+  const sumOf = (k) => byPerson.reduce((s, [, r]) => s + r[k], 0);
 
   const exportCsv = () => {
     const rows = [["Date", "Staff", "Staff code", "Job", "Purpose", "From", "To", "Vehicle", "Recorded by", "Start odometer", "End odometer", "GPS km", "Km", "Edited", "Deleted"]];
@@ -106,17 +122,20 @@ export default function Trips({ staff, vehicles, settings, reloadShared }) {
 
       <div className="panel">
         <h2>By staff member</h2>
+        <p className="note">Business trips only. Private trips in techs' own cars aren't shared with the office. Payments up to the ATO rate ({money(atoRate)}/km) for the first 5,000 business km of the financial year need no withholding. Any amount above that rate, or beyond 5,000 km, may need PAYG withheld. Report the total as a cents-per-km allowance through STP, and confirm the treatment with your payroll provider or accountant.</p>
         <div className="scroll">
           {byPerson.length ? (
             <table>
-              <thead><tr><th>Name</th><th className="num">Trips</th><th className="num">Km</th><th className="num">By GPS</th><th className="num">Edited</th><th className="num">Amount</th></tr></thead>
+              <thead><tr><th>Name</th><th className="num">Trips</th><th className="num">Km</th><th className="num">FY to date</th><th className="num">By GPS</th><th className="num">Edited</th><th className="num">Amount</th><th className="num">No withholding</th><th className="num">Withholding may apply</th></tr></thead>
               <tbody>
                 {byPerson.map(([id, r]) => (
-                  <tr key={id}><td>{name(id)}</td><td className="num">{r.trips}</td><td className="num">{km1(r.km)}</td>
-                    <td className="num">{r.gps}</td><td className="num">{r.edited || ""}</td><td className="num">{money(r.km * rate)}</td></tr>
+                  <tr key={id}><td>{name(id)}{r.noOdo ? <span className="tag warn" style={{ marginLeft: 6 }}>{r.noOdo} no odometer</span> : null}</td>
+                    <td className="num">{r.trips}</td><td className="num">{km1(r.km)}</td><td className="num">{km1(r.fytd)}{r.fytd > CAP ? " ⚠" : ""}</td>
+                    <td className="num">{r.gps}</td><td className="num">{r.edited || ""}</td><td className="num">{money(r.pay)}</td>
+                    <td className="num">{money(r.noWithholding)}</td><td className="num">{r.withholding > 0.004 ? money(r.withholding) : ""}</td></tr>
                 ))}
               </tbody>
-              <tfoot><tr><td>Total</td><td className="num">{live.length}</td><td className="num">{km1(total)}</td><td /><td /><td className="num">{money(total * rate)}</td></tr></tfoot>
+              <tfoot><tr><td>Total</td><td className="num">{live.length}</td><td className="num">{km1(total)}</td><td /><td /><td /><td className="num">{money(sumOf("pay"))}</td><td className="num">{money(sumOf("noWithholding"))}</td><td className="num">{sumOf("withholding") > 0.004 ? money(sumOf("withholding")) : ""}</td></tr></tfoot>
             </table>
           ) : <p className="empty">No trips match these filters.</p>}
         </div>
@@ -128,12 +147,13 @@ export default function Trips({ staff, vehicles, settings, reloadShared }) {
         <div className="scroll">
           {list.length ? (
             <table>
-              <thead><tr><th>Date</th><th>Staff</th><th>Job</th><th>Purpose</th><th>From</th><th>To</th><th>Vehicle</th><th>Recorded</th><th className="num">GPS km</th><th className="num">Km</th></tr></thead>
+              <thead><tr><th>Date</th><th>Staff</th><th>Job</th><th>Purpose</th><th>From</th><th>To</th><th>Vehicle</th><th>Odometer</th><th>Recorded</th><th className="num">GPS km</th><th className="num">Km</th></tr></thead>
               <tbody>
                 {list.map((t) => (
                   <tr key={t.id} className={t.deleted ? "deleted" : undefined}>
                     <td>{fmtDate(t.trip_date)}</td><td>{name(t.user_id)}</td><td>{t.job_no}</td><td className="wide">{t.purpose}</td>
                     <td>{t.from_text}</td><td>{t.to_text}</td><td>{vehName(t.vehicle_id)}</td>
+                    <td>{t.start_odo != null && t.end_odo != null ? `${km1(t.start_odo)} → ${km1(t.end_odo)}` : <span className="tag warn">None</span>}</td>
                     <td>
                       <span className="tag">{sourceLabel(t.source)}</span>
                       {isEdited(t) && <span className="tag warn">Edited</span>}

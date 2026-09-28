@@ -7,6 +7,7 @@ import { login, publicProfile, requireAuth } from "./auth.js";
 import { migrate, query } from "./db.js";
 import adminRoutes from "./routes/admin.js";
 import tripRoutes from "./routes/trips.js";
+import myRoutes, { listVehicles } from "./routes/my.js";
 
 const app = express();
 app.set("trust proxy", 1); // behind Railway + Cloudflare
@@ -47,19 +48,19 @@ app.post("/api/auth/login", loginLimiter, async (req, res, next) => {
 app.use("/api", (req, res, next) => requireAuth(req, res, next).catch(next));
 
 app.get("/api/me", (req, res) => res.json({ profile: publicProfile(req.user) }));
-app.get("/api/vehicles", async (_req, res, next) => {
+app.get("/api/vehicles", async (req, res, next) => {
   try {
-    const { rows } = await query("select id, name, rego from vehicles where active order by name");
-    res.json({ vehicles: rows });
+    res.json({ vehicles: await listVehicles(req.user.id, true) });
   } catch (e) { next(e); }
 });
 app.get("/api/settings", async (_req, res, next) => {
   try {
-    const { rows } = await query("select company_name, rate_per_km from settings where id = 1");
+    const { rows } = await query("select company_name, rate_per_km, ato_rate from settings where id = 1");
     res.json({ settings: rows[0] });
   } catch (e) { next(e); }
 });
 app.use("/api/trips", wrap(tripRoutes));
+app.use("/api/my", wrap(myRoutes));
 app.use("/api/admin", wrap(adminRoutes));
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not found." }));
 

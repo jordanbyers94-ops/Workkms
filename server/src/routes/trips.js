@@ -20,10 +20,15 @@ export function cleanTrip(t) {
   if (!UUID.test(String(t.id))) return { error: "Bad trip id." };
   if (!ISO.test(String(t.trip_date)) || t.trip_date > today()) return { error: "Bad date." };
   if (!["gps", "odometer", "manual"].includes(t.source)) return { error: "Bad source." };
+  const trip_type = t.trip_type === "private" ? "private" : "business";
+  const end_date = t.end_date == null || t.end_date === "" ? t.trip_date : String(t.end_date);
+  if (!ISO.test(end_date) || end_date < t.trip_date || end_date > today()) return { error: "Bad end date." };
   const v = {
     id: String(t.id).toLowerCase(),
     vehicle_id: t.vehicle_id && UUID.test(String(t.vehicle_id)) ? String(t.vehicle_id) : null,
     trip_date: t.trip_date,
+    end_date,
+    trip_type,
     started_at: tsOrNull(t.started_at),
     ended_at: tsOrNull(t.ended_at),
     km: numOrNull(t.km),
@@ -33,22 +38,29 @@ export function cleanTrip(t) {
     gps_km: numOrNull(t.gps_km),
     from_text: text(t.from_text),
     to_text: text(t.to_text),
-    job_no: text(t.job_no),
+    job_no: trip_type === "business" ? text(t.job_no) : null,
     purpose: text(t.purpose),
-    start_lat: numOrNull(t.start_lat),
-    start_lng: numOrNull(t.start_lng),
-    end_lat: numOrNull(t.end_lat),
-    end_lng: numOrNull(t.end_lng),
+    // Private trips never keep location
+    start_lat: trip_type === "business" ? numOrNull(t.start_lat) : null,
+    start_lng: trip_type === "business" ? numOrNull(t.start_lng) : null,
+    end_lat: trip_type === "business" ? numOrNull(t.end_lat) : null,
+    end_lng: trip_type === "business" ? numOrNull(t.end_lng) : null,
     deleted: t.deleted === true,
   };
   for (const [k, x] of Object.entries(v)) if (Number.isNaN(x)) return { error: `Bad ${k}.` };
+  if (!v.deleted) {
+    // ATO logbook: every journey needs start and end odometer readings.
+    if (v.start_odo == null || v.end_odo == null) return { error: "Start and end odometer readings are required." };
+    if (v.end_odo <= v.start_odo) return { error: "End odometer must be higher than start." };
+    if (!v.vehicle_id) return { error: "Choose which car the trip was in." };
+    if (trip_type === "business" && !v.job_no && !v.purpose) return { error: "Business trips need a job number or reason." };
+  }
+  if (v.start_odo != null && v.end_odo != null && v.end_odo > v.start_odo) v.km = Math.round((v.end_odo - v.start_odo) * 10) / 10;
   if (v.km == null || v.km < 0 || v.km >= 3000) return { error: "Km must be between 0 and 3,000." };
-  if (v.source === "odometer" && (v.start_odo == null || v.end_odo == null || v.end_odo <= v.start_odo)) return { error: "Bad odometer readings." };
-  if (!v.job_no && !v.purpose && !v.deleted) return { error: "Needs a job number or purpose." };
   return { value: v };
 }
 
-const COLS = ["id","user_id","vehicle_id","trip_date","started_at","ended_at","km","start_odo","end_odo","source","gps_km",
+const COLS = ["id","user_id","vehicle_id","trip_date","end_date","trip_type","started_at","ended_at","km","start_odo","end_odo","source","gps_km",
   "from_text","to_text","job_no","purpose","start_lat","start_lng","end_lat","end_lng","deleted"];
 // On re-upload, everything is editable except who owns it, the GPS figure, and when it was first saved.
 const UPDATABLE = COLS.filter((c) => !["id", "user_id", "gps_km"].includes(c));
@@ -66,8 +78,9 @@ router.post("/sync", async (req, res) => {
     const { value, error } = cleanTrip(raw);
     if (error) { rejected.push({ id: raw?.id ?? null, error }); continue; }
     if (value.vehicle_id) {
-      const { rowCount } = await query("select 1 from vehicles where id = $1", [value.vehicle_id]);
-      if (!rowCount) value.vehicle_id = null;
+      // Must be the tech's own car (or a company car)
+      const { rowCount } = await query("select 1 from vehicles where id = $1 and (owner_id = $2 or owner_id is null)", [value.vehicle_id, req.user.id]);
+      if (!rowCount) { rejected.push({ id: value.id, error: "That car isn't one of yours." }); continue; }
     }
     const row = { ...value, user_id: req.user.id };
     try {
