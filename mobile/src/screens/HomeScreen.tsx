@@ -3,26 +3,29 @@ import { Alert, AppState, FlatList, Pressable, RefreshControl, Text, View } from
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, makeStyles } from "../components/ui";
 import { duration, fmtKm, fyLabel, fyOf, parseISO, round1, todayISO, weekStartISO } from "../lib/dates";
-import { Profile } from "../lib/api";
-import { discardTracking, finishTracking, getTracking, PermissionError, resumeIfNeeded, startTracking, Tracking } from "../lib/tracking";
-import { listTrips, sync, SyncResult, Trip } from "../lib/trips";
+import { Logbook, Profile } from "../lib/api";
+import { discardTracking, finishTracking, getTracking, resumeIfNeeded, Tracking } from "../lib/tracking";
+import { getOpenLogbooks, listTrips, sync, SyncResult, Trip } from "../lib/trips";
 import { useColors } from "../theme";
 
 type Props = {
   profile: Profile;
   onLog: () => void;
+  onStartGps: () => void;
+  onAddCar: () => void;
   onSaveGps: (t: Tracking) => void;
   onEdit: (trip: Trip) => void;
   onSignOut: () => void;
 };
 
-export default function HomeScreen({ profile, onLog, onSaveGps, onEdit, onSignOut }: Props) {
+export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSaveGps, onEdit, onSignOut }: Props) {
   const c = useColors();
   const st = makeStyles(c);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tracking, setTracking] = useState<Tracking | null>(null);
   const [syncState, setSyncState] = useState<SyncResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [logbooks, setLogbooks] = useState<Logbook[]>([]);
   const [busy, setBusy] = useState(false);
   const [, tick] = useState(0);
 
@@ -35,6 +38,7 @@ export default function HomeScreen({ profile, onLog, onSaveGps, onEdit, onSignOu
     const r = await sync(profile.id).catch(() => ({ ok: false, pending: 0, message: "Couldn't reach the server." }));
     setSyncState(r);
     await loadLocal();
+    setLogbooks(await getOpenLogbooks(profile.id));
   }, [profile.id, loadLocal]);
 
   useEffect(() => {
@@ -54,23 +58,12 @@ export default function HomeScreen({ profile, onLog, onSaveGps, onEdit, onSignOu
 
   const fy = fyOf(todayISO());
   const stats = useMemo(() => {
-    const thisFy = trips.filter((t) => fyOf(t.trip_date) === fy);
+    const thisFy = trips.filter((t) => fyOf(t.trip_date) === fy && t.trip_type !== "private");
     const ws = weekStartISO();
     const sum = (l: Trip[]) => round1(l.reduce((s, t) => s + Number(t.km), 0));
     return { fy: sum(thisFy), week: sum(thisFy.filter((t) => t.trip_date >= ws)), count: thisFy.length };
   }, [trips, fy]);
 
-  const start = async () => {
-    setBusy(true);
-    try {
-      await startTracking();
-      setTracking(await getTracking());
-    } catch (e) {
-      Alert.alert("Can't start GPS", e instanceof PermissionError ? e.message : "Something went wrong starting GPS. Try again, or log the trip manually.");
-    } finally {
-      setBusy(false);
-    }
-  };
   const finish = async () => {
     setBusy(true);
     const t = await finishTracking();
@@ -95,7 +88,10 @@ export default function HomeScreen({ profile, onLog, onSaveGps, onEdit, onSignOu
           <Text style={st.h1}>Work kms</Text>
           <Text style={st.muted}>{profile.full_name}</Text>
         </View>
-        <Pressable onPress={onSignOut} hitSlop={10}><Text style={[st.muted, { fontWeight: "600" }]}>Sign out</Text></Pressable>
+        <View style={{ alignItems: "flex-end", gap: 6 }}>
+          <Pressable onPress={onAddCar} hitSlop={10}><Text style={[st.muted, { fontWeight: "600" }]}>+ Add car</Text></Pressable>
+          <Pressable onPress={onSignOut} hitSlop={10}><Text style={[st.muted, { fontWeight: "600" }]}>Sign out</Text></Pressable>
+        </View>
       </View>
 
       <View style={{ backgroundColor: c.ink, borderRadius: 16, padding: 16, marginTop: 16 }}>
@@ -103,8 +99,19 @@ export default function HomeScreen({ profile, onLog, onSaveGps, onEdit, onSignOu
         <Text style={{ color: c.bg, fontSize: 44, fontWeight: "800", fontVariant: ["tabular-nums"] }}>
           {fmtKm(stats.fy)} <Text style={{ fontSize: 20, color: c.hivis }}>km</Text>
         </Text>
-        <Text style={{ color: c.bg, opacity: 0.7 }}>{fmtKm(stats.week)} km this week, {stats.count} trips this year</Text>
+        <Text style={{ color: c.bg, opacity: 0.7 }}>Business km. {fmtKm(stats.week)} this week, {stats.count} trips this year</Text>
       </View>
+
+      {logbooks.map((l) => {
+        const days = Math.round((Date.now() - new Date(l.start_date + "T00:00").getTime()) / 86400000) + 1;
+        const week = Math.min(Math.ceil(days / 7), 99);
+        return (
+          <View key={l.id} style={{ marginTop: 10, backgroundColor: c.hivis, borderRadius: 12, padding: 12 }}>
+            <Text style={{ color: c.hivisInk, fontWeight: "800" }}>Logbook running: {l.vehicle_name}, week {week}{week <= 12 ? " of 12" : ""}</Text>
+            <Text style={{ color: c.hivisInk, marginTop: 2 }}>Log every trip in this car, private ones included, with odometer readings.</Text>
+          </View>
+        );
+      })}
 
       <Pressable onPress={doSync}>
         <Text style={[st.muted, { marginTop: 8, marginLeft: 2 }]}>{syncText}</Text>
@@ -140,7 +147,7 @@ export default function HomeScreen({ profile, onLog, onSaveGps, onEdit, onSignOu
       ) : (
         <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
           <View style={{ flex: 1 }}><Button title="Log manually" kind="dark" onPress={onLog} /></View>
-          <View style={{ flex: 1 }}><Button title="Start GPS trip" onPress={start} busy={busy} /></View>
+          <View style={{ flex: 1 }}><Button title="Start GPS trip" onPress={onStartGps} /></View>
         </View>
       )}
 
@@ -159,9 +166,10 @@ export default function HomeScreen({ profile, onLog, onSaveGps, onEdit, onSignOu
         contentContainerStyle={{ paddingBottom: 40 }}
         renderItem={({ item: t }) => {
           const d = parseISO(t.trip_date);
-          const title = t.purpose || t.job_no || [t.from_text, t.to_text].filter(Boolean).join(" to ") || "Work trip";
-          const sub = [t.job_no && t.purpose ? `Job ${t.job_no}` : "", t.to_text, t.source === "gps" ? "GPS" : t.source === "odometer" ? "Odometer" : ""]
-            .filter(Boolean).join(", ");
+          const priv = t.trip_type === "private";
+          const title = priv ? "Private trip" : t.purpose || (t.job_no ? `Job ${t.job_no}` : "") || [t.from_text, t.to_text].filter(Boolean).join(" to ") || "Work trip";
+          const sub = [!priv && t.job_no && t.purpose ? `Job ${t.job_no}` : "", t.to_text, t.source === "gps" ? "GPS" : "",
+            t.start_odo == null ? "No odometer" : ""].filter(Boolean).join(", ");
           return (
             <Pressable onPress={() => onEdit(t)} style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderColor: c.line, opacity: pressed ? 0.6 : 1 }]}>
               <View style={{ width: 40, alignItems: "center" }}>

@@ -8,6 +8,8 @@ const KEY = "tracking:v1";
 
 export type Tracking = {
   status: "tracking" | "done";
+  vehicle_id?: string;
+  start_odo?: number;
   startedAt: number;
   endedAt?: number;
   meters: number;
@@ -75,7 +77,7 @@ const UPDATE_OPTIONS: Location.LocationTaskOptions = {
 
 export class PermissionError extends Error {}
 
-export async function startTracking(): Promise<void> {
+export async function startTracking(opts: { vehicle_id: string; start_odo: number }): Promise<void> {
   const fg = await Location.requestForegroundPermissionsAsync();
   if (fg.status !== "granted") {
     throw new PermissionError("Location access is off for Work kms. Turn it on in your phone's Settings to track trips by GPS.");
@@ -86,7 +88,7 @@ export async function startTracking(): Promise<void> {
       "GPS trips need location set to \"Always\" (iPhone) or \"Allow all the time\" (Android) so tracking keeps going when your screen locks. You can change it in your phone's Settings under Work kms."
     );
   }
-  await setTracking({ status: "tracking", startedAt: Date.now(), meters: 0 });
+  await setTracking({ status: "tracking", startedAt: Date.now(), meters: 0, vehicle_id: opts.vehicle_id, start_odo: opts.start_odo });
   await Location.startLocationUpdatesAsync(TRACKING_TASK, UPDATE_OPTIONS);
 }
 

@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { fyOf, fyStartISO, todayISO } from "./dates";
-import { api, ApiError, Vehicle } from "./api";
+import { api, ApiError, Logbook, Vehicle } from "./api";
 
 export type Source = "gps" | "odometer" | "manual";
 
@@ -10,6 +10,8 @@ export type Trip = {
   user_id: string;
   vehicle_id: string | null;
   trip_date: string;
+  end_date: string | null;
+  trip_type: "business" | "private";
   started_at: string | null;
   ended_at: string | null;
   km: number;
@@ -34,6 +36,7 @@ type Stored = Trip & { _dirty?: boolean };
 const tripsKey = (uid: string) => `trips:${uid}`;
 const vehiclesKey = "vehicles:v1";
 const lastOdoKey = (uid: string) => `lastOdo:${uid}`;
+const logbooksKey = (uid: string) => `logbooks:${uid}`;
 
 export const newTripId = () => Crypto.randomUUID();
 
@@ -68,10 +71,6 @@ export async function saveTrip(uid: string, trip: Trip) {
   if (i >= 0) all[i] = row;
   else all.push(row);
   await writeLocal(uid, all);
-  if (trip.end_odo != null) {
-    const prev = Number(await AsyncStorage.getItem(lastOdoKey(uid))) || 0;
-    if (trip.end_odo > prev) await AsyncStorage.setItem(lastOdoKey(uid), String(trip.end_odo));
-  }
   sync(uid).catch(() => {});
 }
 
@@ -79,9 +78,14 @@ export async function deleteTrip(uid: string, trip: Trip) {
   await saveTrip(uid, { ...trip, deleted: true });
 }
 
-export async function lastOdometer(uid: string): Promise<number | null> {
-  const v = await AsyncStorage.getItem(lastOdoKey(uid));
-  return v ? Number(v) : null;
+/** Highest odometer reading known for a car: from trips on this phone or the server's record. */
+export async function lastOdometer(uid: string, vehicle?: Vehicle | null): Promise<number | null> {
+  if (!vehicle) return null;
+  const local = (await readLocal(uid))
+    .filter((t) => t.vehicle_id === vehicle.id && !t.deleted && t.end_odo != null)
+    .reduce((m, t) => Math.max(m, Number(t.end_odo)), 0);
+  const best = Math.max(local, Number(vehicle.last_odo ?? 0));
+  return best > 0 ? best : null;
 }
 
 let syncing: Promise<SyncResult> | null = null;
@@ -158,7 +162,31 @@ export async function getVehicles(): Promise<Vehicle[]> {
   }
 }
 
+/** Needs signal: cars are saved straight to the server. */
+export async function addVehicle(v: { name: string; make: string; model: string; engine: string; rego: string; is_car: boolean }) {
+  const { vehicle } = await api<{ vehicle: Vehicle }>("/my/vehicles", { method: "POST", body: v });
+  await getVehicles();
+  return vehicle;
+}
+
+/** Logbook periods still running, cached for offline use. */
+export async function getOpenLogbooks(uid: string): Promise<Logbook[]> {
+  try {
+    const { logbooks } = await api<{ logbooks: Logbook[] }>("/my/logbooks");
+    const open = logbooks.filter((l) => !l.end_date);
+    await AsyncStorage.setItem(logbooksKey(uid), JSON.stringify(open));
+    return open;
+  } catch {
+    try {
+      return JSON.parse((await AsyncStorage.getItem(logbooksKey(uid))) ?? "[]");
+    } catch {
+      return [];
+    }
+  }
+}
+
 export async function clearLocal(uid: string) {
   await AsyncStorage.removeItem(tripsKey(uid));
   await AsyncStorage.removeItem(lastOdoKey(uid));
+  await AsyncStorage.removeItem(logbooksKey(uid));
 }

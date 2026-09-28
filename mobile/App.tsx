@@ -8,11 +8,15 @@ import { discardTracking, Tracking } from "./src/lib/tracking";
 import { clearLocal, pendingCount, sync, Trip } from "./src/lib/trips";
 import HomeScreen from "./src/screens/HomeScreen";
 import LoginScreen from "./src/screens/LoginScreen";
+import StartTripScreen from "./src/screens/StartTripScreen";
 import TripFormScreen from "./src/screens/TripFormScreen";
+import VehicleScreen from "./src/screens/VehicleScreen";
 import { useColors } from "./src/theme";
 
 type Route =
   | { name: "home" }
+  | { name: "start" }
+  | { name: "vehicle"; back: Route }
   | { name: "form"; kind: "new" }
   | { name: "form"; kind: "gps"; tracking: Tracking }
   | { name: "form"; kind: "edit"; trip: Trip };
@@ -68,6 +72,18 @@ export default function App() {
     body = <Centered><ActivityIndicator color={c.ink} /></Centered>;
   } else if (!profile) {
     body = <LoginScreen notice={notice} onSignedIn={(p) => { setNotice(undefined); setProfile(p); }} />;
+  } else if (route.name === "vehicle") {
+    // After adding a car, go back to where they came from
+    body = <VehicleScreen onDone={() => setRoute(route.back.name === "vehicle" ? { name: "home" } : route.back)} />;
+  } else if (route.name === "start") {
+    body = (
+      <StartTripScreen
+        uid={profile.id}
+        onStarted={() => setRoute({ name: "home" })}
+        onCancel={() => setRoute({ name: "home" })}
+        onAddCar={() => setRoute({ name: "vehicle", back: { name: "start" } })}
+      />
+    );
   } else if (route.name === "form") {
     body = (
       <TripFormScreen
@@ -76,6 +92,7 @@ export default function App() {
         trip={route.kind === "edit" ? route.trip : undefined}
         tracking={route.kind === "gps" ? route.tracking : undefined}
         onDone={() => setRoute({ name: "home" })}
+        onAddCar={() => setRoute({ name: "vehicle", back: route })}
       />
     );
   } else {
@@ -83,6 +100,8 @@ export default function App() {
       <HomeScreen
         profile={profile}
         onLog={() => setRoute({ name: "form", kind: "new" })}
+        onStartGps={() => setRoute({ name: "start" })}
+        onAddCar={() => setRoute({ name: "vehicle", back: { name: "home" } })}
         onSaveGps={(t) => setRoute({ name: "form", kind: "gps", tracking: t })}
         onEdit={(trip) => setRoute({ name: "form", kind: "edit", trip })}
         onSignOut={signOut}

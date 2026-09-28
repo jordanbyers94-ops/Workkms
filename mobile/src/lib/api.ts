@@ -3,7 +3,18 @@ import * as SecureStore from "expo-secure-store";
 import { API_URL } from "../config";
 
 export type Profile = { id: string; full_name: string; staff_code: string; role: "tech" | "admin"; active: boolean };
-export type Vehicle = { id: string; name: string; rego: string | null };
+export type Vehicle = {
+  id: string;
+  name: string;
+  rego: string | null;
+  make?: string | null;
+  model?: string | null;
+  engine?: string | null;
+  is_car?: boolean;
+  owner_id?: string | null;
+  last_odo?: number | null;
+};
+export type Logbook = { id: string; vehicle_id: string; vehicle_name: string; start_date: string; start_odo: number; end_date: string | null };
 
 const TOKEN_KEY = "workkms.token";
 const PROFILE_KEY = "profile:v1";
