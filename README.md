@@ -33,6 +33,42 @@ The server enforces all of this, not just the app:
 - PINs are stored as bcrypt hashes. Five wrong PINs locks the account for 15 minutes, and each connection is limited to 30 sign-in attempts per 15 minutes.
 - Resetting a PIN or deactivating someone signs them out on every device straight away.
 
+## ATO logbook (techs' own cars)
+
+Techs drive their own cars, so each tech's logbook is their own tax record. The office sees business trips only.
+
+**What the app records, per the ATO's logbook requirements:**
+- **Every journey:** start and end date, start and end odometer, km, and the reason (business, with a job or reason, or private). Km is always worked out from the odometer readings. For GPS trips, GPS is kept as a cross-check.
+- **Each car:** make, model, engine capacity and registration. Techs add these in the app or under **My logbook** on the website.
+- **Logbook periods:** start date and opening odometer, then end date and closing odometer. Total km, business km and the business-use percentage are calculated automatically.
+- **30 June odometer readings:** recorded for each year the logbook is relied on.
+
+**Checks in the logbook report:**
+- a period under 12 weeks (84 days)
+- odometer gaps between trips, which are unlogged driving and count as non-business
+- overlapping readings
+- trips with no odometer readings
+- vague reasons like "work"
+- missing car details
+
+The report prints or saves as a PDF laid out as an ATO logbook.
+
+**Privacy:** private trips never store a location, and the office can't see them. Logbook periods and odometer readings are visible only to the tech.
+
+**Techs' access:** techs sign in to the website with their staff code and PIN to see **My logbook**. Office admins also get a My logbook tab for their own car. Before deactivating someone who's leaving, remind them to download their report and CSV. They need to keep their records for five years after lodging.
+
+**Payroll:** the Trips tab splits each person's per-km payments into two parts:
+- the part at or under the ATO rate within the first 5,000 business km of the financial year, where no withholding is needed
+- the rest, where withholding may apply
+
+Set **Settings > ATO cents-per-km rate** each July. It's 91c for 2026–27. Report the payments as a cents-per-km allowance through STP, and confirm the treatment with your payroll provider or accountant.
+
+This is record-keeping software, not tax advice.
+
+## Who can use Work kms
+
+Each staff member has a **Work kms** switch on the dashboard's Staff tab. Only people switched on can sign in, and switching someone off signs them out of the app straight away. Their trips and logbook stay on record. Office admins always have access. Staff who existed before this switch was added keep access; new staff start switched off unless you tick **Can use Work kms** when adding them.
+
 ## Privacy
 
 GPS only runs between **Start GPS trip** and **Finish trip**. Only the start and end coordinates are stored, not the route. Tell staff in writing what the app collects and why before rolling it out. If anyone works in NSW or the ACT, those states have specific notice rules for workplace tracking.
