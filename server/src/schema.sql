@@ -102,3 +102,12 @@ create table if not exists odo_readings (
 create index if not exists odo_readings_vehicle on odo_readings (vehicle_id, reading_date);
 
 alter table settings add column if not exists ato_rate numeric(5,2) not null default 0.91;
+
+-- Per-person access switch. Admins always have access; everyone else only when switched on.
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_name = 'staff' and column_name = 'kms_access') then
+    -- People already set up keep access; new people start switched off unless the office ticks it
+    alter table staff add column kms_access boolean not null default true;
+    alter table staff alter column kms_access set default false;
+  end if;
+end $$;

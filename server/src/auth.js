@@ -17,7 +17,9 @@ export const hashSecret = (s) => bcrypt.hash(String(s), 11);
 export const signToken = (u) =>
   jwt.sign({ sub: u.id, tv: u.token_version, role: u.role }, SECRET, { expiresIn: u.role === "admin" ? "12h" : "60d" });
 
-export const publicProfile = (u) => ({ id: u.id, full_name: u.full_name, staff_code: u.staff_code, role: u.role, active: u.active });
+export const publicProfile = (u) => ({ id: u.id, full_name: u.full_name, staff_code: u.staff_code, role: u.role, active: u.active, kms_access: hasKmsAccess(u) });
+export const hasKmsAccess = (u) => u.role === "admin" || u.kms_access === true;
+const NO_ACCESS = "You don't have access to Work kms. Ask the office to switch it on for you.";
 
 const DUMMY_HASH = bcrypt.hashSync("timing-safe-dummy", 11);
 const MAX_FAILS = 5;
@@ -45,6 +47,7 @@ export async function login(staffCode, secret) {
     return { status: 401, error: "Staff code or PIN is wrong." };
   }
   if (!u.active) return { status: 403, error: "This account has been deactivated. Talk to the office." };
+  if (!hasKmsAccess(u)) return { status: 403, error: NO_ACCESS };
   await query("update staff set failed_logins = 0, locked_until = null where id = $1", [u.id]);
   return { status: 200, token: signToken(u), profile: publicProfile(u) };
 }
@@ -59,11 +62,13 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ error: "Your session has expired. Sign in again." });
   }
   const { rows } = await query(
-    "select id, full_name, staff_code, role, active, token_version from staff where id = $1",
+    "select id, full_name, staff_code, role, active, token_version, kms_access from staff where id = $1",
     [payload.sub]
   );
   const u = rows[0];
   if (!u || !u.active || u.token_version !== payload.tv) return res.status(401).json({ error: "Sign in again." });
+  // Switched off: end the session so the app signs them out straight away
+  if (!hasKmsAccess(u)) return res.status(401).json({ error: NO_ACCESS });
   req.user = u;
   next();
 }
