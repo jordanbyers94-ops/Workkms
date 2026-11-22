@@ -6,7 +6,7 @@ const router = Router();
 router.use(requireAdmin);
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
-const staffCols = "id, full_name, staff_code, role, active, created_at";
+const staffCols = "id, full_name, staff_code, role, active, kms_access, created_at";
 
 // ----- Trips -----
 router.get("/trips", async (req, res) => {
@@ -31,13 +31,14 @@ router.post("/staff", async (req, res) => {
   const staff_code = String(req.body?.staff_code ?? "").trim().toLowerCase();
   const role = req.body?.role === "admin" ? "admin" : "tech";
   const secret = String(req.body?.secret ?? "");
+  const kms_access = req.body?.kms_access === true;
   if (!full_name) return res.status(400).json({ error: "Enter the person's name." });
   if (!CODE_RE.test(staff_code)) return res.status(400).json({ error: "Staff code must be 2–24 letters or numbers with no spaces." });
   if (!secretOk(secret, role)) return res.status(400).json({ error: secretMsg(role) });
   try {
     const { rows } = await query(
-      `insert into staff (full_name, staff_code, role, secret_hash) values ($1,$2,$3,$4) returning ${staffCols}`,
-      [full_name, staff_code, role, await hashSecret(secret)]
+      `insert into staff (full_name, staff_code, role, secret_hash, kms_access) values ($1,$2,$3,$4,$5) returning ${staffCols}`,
+      [full_name, staff_code, role, await hashSecret(secret), kms_access]
     );
     res.json({ staff: rows[0] });
   } catch (e) {
@@ -63,6 +64,13 @@ router.post("/staff/:id/active", async (req, res) => {
   const active = req.body?.active === true;
   if (req.params.id === req.user.id && !active) return res.status(400).json({ error: "You can't deactivate your own account." });
   const { rowCount } = await query("update staff set active = $2, token_version = token_version + 1 where id = $1", [req.params.id, active]);
+  if (!rowCount) return res.status(404).json({ error: "Staff member not found." });
+  res.json({ ok: true });
+});
+
+router.post("/staff/:id/kms", async (req, res) => {
+  const access = req.body?.access === true;
+  const { rowCount } = await query("update staff set kms_access = $2 where id = $1", [req.params.id, access]);
   if (!rowCount) return res.status(404).json({ error: "Staff member not found." });
   res.json({ ok: true });
 });
