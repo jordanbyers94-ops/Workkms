@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { api } from "../api.js";
 
 export default function Staff({ me, staff, reload }) {
-  const [form, setForm] = useState({ full_name: "", staff_code: "", role: "tech", secret: "" });
+  const [form, setForm] = useState({ full_name: "", staff_code: "", role: "tech", secret: "", kms_access: true });
   const [status, setStatus] = useState({ text: "", err: false });
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const isAdmin = form.role === "admin";
@@ -17,7 +17,7 @@ export default function Staff({ me, staff, reload }) {
     run(async () => {
       await api("/admin/staff", { method: "POST", body: form });
       const code = form.staff_code.trim().toLowerCase();
-      setForm({ full_name: "", staff_code: "", role: "tech", secret: "" });
+      setForm({ full_name: "", staff_code: "", role: "tech", secret: "", kms_access: true });
       return `Added ${form.full_name}. They sign in with staff code "${code}".`;
     });
   };
@@ -27,6 +27,11 @@ export default function Staff({ me, staff, reload }) {
     if (!secret) return;
     run(async () => { await api(`/admin/staff/${s.id}/reset`, { method: "POST", body: { secret } }); return `${label[0].toUpperCase() + label.slice(1)} updated for ${s.full_name}. They'll need to sign in again.`; });
   };
+  const toggleKms = (s) =>
+    run(async () => {
+      await api(`/admin/staff/${s.id}/kms`, { method: "POST", body: { access: !s.kms_access } });
+      return s.kms_access ? `${s.full_name} can no longer use Work kms and has been signed out of it. Their trips stay on record.` : `${s.full_name} can now use Work kms.`;
+    });
   const toggle = (s) => {
     if (s.active && !confirm(`Deactivate ${s.full_name}? They'll be signed out and can't sign in again. Their trips stay on record.`)) return;
     run(async () => { await api(`/admin/staff/${s.id}/active`, { method: "POST", body: { active: !s.active } }); return `${s.full_name} ${s.active ? "deactivated" : "reactivated"}.`; });
@@ -35,13 +40,19 @@ export default function Staff({ me, staff, reload }) {
   return (
     <div className="panel">
       <h2>Staff</h2>
+      <p className="note">Only people with Work kms switched on can sign in to it. Switching someone off signs them out straight away. Their trips and logbook stay on record. Office admins always have access.</p>
       <div className="scroll">
         <table>
-          <thead><tr><th>Name</th><th>Staff code</th><th>Role</th><th>Status</th><th /></tr></thead>
+          <thead><tr><th>Name</th><th>Staff code</th><th>Role</th><th>Work kms</th><th>Status</th><th /></tr></thead>
           <tbody>
             {staff.map((s) => (
               <tr key={s.id}>
                 <td>{s.full_name}</td><td>{s.staff_code}</td><td>{s.role === "admin" ? "Office admin" : "Technician"}</td>
+                <td>{s.role === "admin" ? <span className="muted">Always</span> : (
+                  <label className="check" style={{ height: "auto" }}>
+                    <input type="checkbox" checked={s.kms_access} onChange={() => toggleKms(s)} /> {s.kms_access ? "On" : "Off"}
+                  </label>
+                )}</td>
                 <td>{s.active ? "Active" : <span className="tag">Inactive</span>}</td>
                 <td className="actions">
                   <button className="btn ghost small" onClick={() => reset(s)}>Reset {s.role === "admin" ? "password" : "PIN"}</button>
@@ -64,6 +75,7 @@ export default function Staff({ me, staff, reload }) {
         <label className="f">{isAdmin ? "Password" : "PIN"}
           <input value={form.secret} onChange={set("secret")} required type={isAdmin ? "password" : "text"} inputMode={isAdmin ? "text" : "numeric"} autoComplete="new-password" />
         </label>
+        {!isAdmin && <label className="check"><input type="checkbox" checked={form.kms_access} onChange={(e) => setForm({ ...form, kms_access: e.target.checked })} /> Can use Work kms</label>}
         <button className="btn">Add staff member</button>
       </form>
       <p className={`msg pad${status.err ? " err" : ""}`}>{status.text}</p>
