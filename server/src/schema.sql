@@ -111,3 +111,7 @@ do $$ begin
     alter table staff alter column kms_access set default false;
   end if;
 end $$;
+
+-- Automatic drive detection / CarPlay
+alter table trips add column if not exists auto_detected boolean not null default false;
+alter table trips add column if not exists odo_estimated boolean not null default false;

@@ -5,7 +5,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { API_URL } from "./src/config";
 import { getCachedProfile, getToken, onSignedOut, Profile, refreshProfile, signOutLocal } from "./src/lib/api";
 import { discardTracking, Tracking } from "./src/lib/tracking";
-import { clearLocal, pendingCount, sync, Trip } from "./src/lib/trips";
+import { stopAllAuto, toTrip } from "./src/lib/auto";
+import { AutoTrip, clearLocal, pendingCount, sync, Trip } from "./src/lib/trips";
+import SettingsScreen from "./src/screens/SettingsScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import StartTripScreen from "./src/screens/StartTripScreen";
@@ -19,7 +21,9 @@ type Route =
   | { name: "vehicle"; back: Route }
   | { name: "form"; kind: "new" }
   | { name: "form"; kind: "gps"; tracking: Tracking }
-  | { name: "form"; kind: "edit"; trip: Trip };
+  | { name: "form"; kind: "edit"; trip: Trip }
+  | { name: "form"; kind: "sort"; sort: AutoTrip }
+  | { name: "settings" };
 
 export default function App() {
   const c = useColors();
@@ -38,6 +42,7 @@ export default function App() {
       }
     })();
     return onSignedOut(() => {
+      stopAllAuto().catch(() => {});
       setNotice("Your session ended (PIN changed, Work kms access switched off, or it's been 60 days). Sign in again. Your saved trips are still on this phone.");
       setProfile(null);
       setRoute({ name: "home" });
@@ -50,6 +55,7 @@ export default function App() {
     const pending = await pendingCount(profile.id);
     const go = async () => {
       await discardTracking();
+      await stopAllAuto();
       await clearLocal(profile.id);
       await signOutLocal();
       setNotice(undefined);
@@ -84,12 +90,15 @@ export default function App() {
         onAddCar={() => setRoute({ name: "vehicle", back: { name: "start" } })}
       />
     );
+  } else if (route.name === "settings") {
+    body = <SettingsScreen uid={profile.id} onDone={() => setRoute({ name: "home" })} onAddCar={() => setRoute({ name: "vehicle", back: { name: "settings" } })} />;
   } else if (route.name === "form") {
     body = (
       <TripFormScreen
         uid={profile.id}
         kind={route.kind}
-        trip={route.kind === "edit" ? route.trip : undefined}
+        trip={route.kind === "edit" ? route.trip : route.kind === "sort" ? toTrip(profile.id, route.sort, "business") : undefined}
+        sortId={route.kind === "sort" ? route.sort.id : undefined}
         tracking={route.kind === "gps" ? route.tracking : undefined}
         onDone={() => setRoute({ name: "home" })}
         onAddCar={() => setRoute({ name: "vehicle", back: route })}
@@ -105,6 +114,8 @@ export default function App() {
         onSaveGps={(t) => setRoute({ name: "form", kind: "gps", tracking: t })}
         onEdit={(trip) => setRoute({ name: "form", kind: "edit", trip })}
         onSignOut={signOut}
+        onSettings={() => setRoute({ name: "settings" })}
+        onSortBusiness={(sort) => setRoute({ name: "form", kind: "sort", sort })}
       />
     );
   }

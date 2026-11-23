@@ -8,19 +8,22 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://workkms-production.up.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://workkms-production.up.railway.app",
+        "CARPLAY": "0"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://workkms-production.up.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://workkms-production.up.railway.app",
+        "CARPLAY": "0"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://workkms-production.up.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://workkms-production.up.railway.app",
+        "CARPLAY": "0"
       }
     }
   },

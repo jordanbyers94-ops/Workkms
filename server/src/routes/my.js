@@ -200,6 +200,17 @@ export async function buildReport(userId, logbookId) {
   if (missingOdo.length) warnings.push(`${missingOdo.length} trip${missingOdo.length > 1 ? "s are" : " is"} missing odometer readings and ${missingOdo.length > 1 ? "aren't" : "isn't"} counted.`);
   const vague = business.filter((t) => !t.job_no && (!t.purpose || t.purpose.trim().length < 5 || VAGUE.test(t.purpose.trim())));
   if (vague.length) warnings.push(`${vague.length} business trip${vague.length > 1 ? "s have" : " has"} a vague reason. Add the job, client or site so the purpose is clear.`);
+  const estimated = withOdo.filter((t) => t.odo_estimated);
+  if (estimated.length) {
+    const checks = readings.filter((r) => r.reading_date >= l.start_date && r.reading_date <= endDate).length;
+    const weeks = Math.max(1, Math.round(days / 7));
+    warnings.push(
+      `${estimated.length} trip${estimated.length > 1 ? "s have" : " has"} odometer readings worked out from GPS (marked ≈). ` +
+      (checks < Math.floor(weeks / 2)
+        ? `Only ${checks} odometer check${checks === 1 ? "" : "s"} in ${weeks} weeks. Do one about once a week in the app's Settings so the readings stay anchored to the dash.`
+        : `${checks} odometer checks were recorded in this period to keep them anchored to the dash.`)
+    );
+  }
   if (!vehicle.make || !vehicle.model || !vehicle.engine || !vehicle.rego) warnings.push("The car's make, model, engine capacity or registration is missing.");
   if (!vehicle.is_car) warnings.push("This vehicle is marked as carrying 1 tonne or more, or 9 or more passengers. The ATO's car logbook and cents-per-km methods apply to cars. Check with your accountant how to claim for this vehicle.");
 

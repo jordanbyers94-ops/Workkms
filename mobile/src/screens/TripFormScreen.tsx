@@ -5,12 +5,14 @@ import { Button, Field, makeStyles, Segmented } from "../components/ui";
 import { fmtKm, isValidISO, round1, todayISO } from "../lib/dates";
 import { Vehicle } from "../lib/api";
 import { discardTracking, Tracking } from "../lib/tracking";
-import { deleteTrip, getVehicles, lastOdometer, listTrips, newTripId, saveTrip, Trip } from "../lib/trips";
+import { deleteTrip, getVehicles, lastOdometer, listTrips, newTripId, removeToSort, saveTrip, Trip } from "../lib/trips";
+import { refreshCarPlay } from "../lib/auto";
 import { useColors } from "../theme";
 
 type Props = {
   uid: string;
-  kind: "new" | "edit" | "gps";
+  kind: "new" | "edit" | "gps" | "sort";
+  sortId?: string;
   trip?: Trip;
   tracking?: Tracking;
   onDone: () => void;
@@ -53,7 +55,7 @@ export function VehiclePicker({ vehicles, value, onChange, onAddCar }: { vehicle
   );
 }
 
-export default function TripFormScreen({ uid, kind, trip, tracking, onDone, onAddCar }: Props) {
+export default function TripFormScreen({ uid, kind, trip, tracking, sortId, onDone, onAddCar }: Props) {
   const c = useColors();
   const st = makeStyles(c);
   const gpsKm = tracking ? round1(tracking.meters / 1000) : trip?.gps_km ?? null;
@@ -145,11 +147,18 @@ export default function TripFormScreen({ uid, kind, trip, tracking, onDone, onAd
       end_lat: business ? trip?.end_lat ?? tracking?.end?.lat ?? null : null,
       end_lng: business ? trip?.end_lng ?? tracking?.end?.lng ?? null : null,
       deleted: false,
+      auto_detected: trip?.auto_detected ?? false,
+      // Still an estimate only if the readings weren't changed from what GPS worked out
+      odo_estimated: !!trip?.odo_estimated && s === trip.start_odo && e === trip.end_odo,
     };
     setBusy(true);
     try {
       await saveTrip(uid, row);
       if (kind === "gps") await discardTracking();
+      if (kind === "sort" && sortId) {
+        await removeToSort(uid, sortId, false);
+        await refreshCarPlay();
+      }
       onDone();
     } catch {
       setError("Couldn't save the trip on this phone. Try again.");
@@ -164,7 +173,7 @@ export default function TripFormScreen({ uid, kind, trip, tracking, onDone, onAd
       { text: "Delete", style: "destructive", onPress: async () => { if (trip) await deleteTrip(uid, trip); onDone(); } },
     ]);
 
-  const title = kind === "edit" ? "Edit trip" : kind === "gps" ? "Save GPS trip" : "Log a trip";
+  const title = kind === "edit" ? "Edit trip" : kind === "gps" ? "Save GPS trip" : kind === "sort" ? "Sort drive" : "Log a trip";
 
   return (
     <SafeAreaView style={st.screen}>

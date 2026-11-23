@@ -71,7 +71,37 @@ Each staff member has a **Work kms** switch on the dashboard's Staff tab. Only p
 
 ## Privacy
 
-GPS only runs between **Start GPS trip** and **Finish trip**. Only the start and end coordinates are stored, not the route. Tell staff in writing what the app collects and why before rolling it out. If anyone works in NSW or the ACT, those states have specific notice rules for workplace tracking.
+- With drive detection **off** (the default), GPS only runs between **Start GPS trip** and **Finish trip**.
+- With drive detection **on** (each tech chooses this in Settings), the phone watches for the car leaving where it was parked and measures every drive. Detected drives stay on the tech's phone until they mark them Business or Private. Nothing goes to the server before that.
+- Only start and end coordinates are kept, never the route, and only for business trips. Private trips are saved without any location, and the office can't see them.
+
+Tell staff in writing what the app collects and why before rolling it out, and make clear drive detection is their choice. If anyone works in NSW or the ACT, those states have specific notice rules for workplace tracking.
+
+## Automatic drive detection
+
+Turned on per tech in the app's **Settings**. Needs location set to Always (iPhone) or Allow all the time (Android).
+
+1. While parked, the phone only watches a 150 m circle around where the car stopped. This uses very little battery.
+2. Leaving the circle starts GPS tracking. The few hundred metres before it noticed are added as a straight line.
+3. Parked for 5 minutes ends the drive. Walks (never above 15 km/h for 10 minutes) and drives under 500 m are dropped.
+4. The drive appears under **Trips to sort** with **Business**, **Private** and **✕** (not a drive in this car, like a bus or a lift).
+
+Odometer readings for detected drives carry on from the car's last reading plus the GPS distance, and are marked ≈ in the logbook report. Techs should do an **Odometer check** in Settings about weekly. Trips after a check start from the real dash reading, and any difference shows up in the report.
+
+The rules are in `mobile/src/lib/drive.ts` and are covered by tests. They haven't been tried on a real phone yet, so test-drive before rolling out.
+
+## CarPlay
+
+The iPhone app can show on the car's CarPlay screen: the trip in progress, **Start trip** / **Finish trip**, and **Trips to sort**. A drive can be marked Private there, or Business to add the job on the phone later. With drive detection on, plugging into CarPlay starts a trip and unplugging ends it.
+
+CarPlay is **off in builds by default**, because Apple has to approve it first:
+
+1. Request the CarPlay **Driving Task** entitlement at developer.apple.com/contact/carplay (signed in with your Apple Developer account). Describe it as a mileage logbook for work trips. Approval can take a while.
+2. Once approved, go to developer.apple.com > Certificates, Identifiers & Profiles > Identifiers > `tracking.workms` and check the CarPlay entitlement is listed.
+3. In `mobile/eas.json`, change `"CARPLAY": "0"` to `"CARPLAY": "1"` in the `production` profile.
+4. Rebuild with `npx eas-cli@latest build -p ios --profile production`. If EAS asks to update the provisioning profile, say yes.
+
+Without the approval, a build with `CARPLAY=1` fails at signing. Builds with `CARPLAY=0` are unaffected. The CarPlay code is in `mobile/modules/work-kms-carplay` and `mobile/plugins/withCarPlay.js`.
 
 ---
 

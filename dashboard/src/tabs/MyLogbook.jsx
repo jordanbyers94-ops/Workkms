@@ -306,7 +306,7 @@ function Report({ report, me, onBack }) {
           <div><small>Business km</small><b>{km1(t.business_km)}</b></div>
           <div><small>Business-use percentage</small><b>{t.business_pct != null ? `${t.business_pct}%` : "n/a"}</b></div>
         </div>
-        <p className="note">Business-use % = business km ÷ total km for the period. Private trips ({km1(t.private_km)} km) and any unlogged km ({km1(t.unlogged_km)} km) count as non-business.</p>
+        <p className="note">≈ marks odometer readings worked out from GPS on automatically detected drives, between odometer checks off the dash. Business-use % = business km ÷ total km for the period. Private trips ({km1(t.private_km)} km) and any unlogged km ({km1(t.unlogged_km)} km) count as non-business.</p>
 
         <div className="scroll">
           <table>
@@ -317,8 +317,8 @@ function Report({ report, me, onBack }) {
               ) : (
                 <tr key={r.trip.id}>
                   <td>{longDate(r.trip.trip_date)}</td><td>{longDate(r.trip.end_date ?? r.trip.trip_date)}</td>
-                  <td className="num">{r.trip.start_odo != null ? km1(r.trip.start_odo) : "missing"}</td>
-                  <td className="num">{r.trip.end_odo != null ? km1(r.trip.end_odo) : "missing"}</td>
+                  <td className="num">{r.trip.start_odo != null ? `${r.trip.odo_estimated ? "≈ " : ""}${km1(r.trip.start_odo)}` : "missing"}</td>
+                  <td className="num">{r.trip.end_odo != null ? `${r.trip.odo_estimated ? "≈ " : ""}${km1(r.trip.end_odo)}` : "missing"}</td>
                   <td className="num">{km1(r.trip.km)}</td>
                   <td>{r.trip.trip_type === "private" ? "Private" : "Business"}</td>
                   <td className="wide">{r.trip.trip_type === "private" ? "Private" : [r.trip.job_no && `Job ${r.trip.job_no}`, r.trip.purpose, r.trip.to_text && `to ${r.trip.to_text}`].filter(Boolean).join(", ")}

@@ -46,6 +46,8 @@ export function cleanTrip(t) {
     end_lat: trip_type === "business" ? numOrNull(t.end_lat) : null,
     end_lng: trip_type === "business" ? numOrNull(t.end_lng) : null,
     deleted: t.deleted === true,
+    auto_detected: t.auto_detected === true,
+    odo_estimated: t.odo_estimated === true,
   };
   for (const [k, x] of Object.entries(v)) if (Number.isNaN(x)) return { error: `Bad ${k}.` };
   if (!v.deleted) {
@@ -61,7 +63,7 @@ export function cleanTrip(t) {
 }
 
 const COLS = ["id","user_id","vehicle_id","trip_date","end_date","trip_type","started_at","ended_at","km","start_odo","end_odo","source","gps_km",
-  "from_text","to_text","job_no","purpose","start_lat","start_lng","end_lat","end_lng","deleted"];
+  "from_text","to_text","job_no","purpose","start_lat","start_lng","end_lat","end_lng","deleted","auto_detected","odo_estimated"];
 // On re-upload, everything is editable except who owns it, the GPS figure, and when it was first saved.
 const UPDATABLE = COLS.filter((c) => !["id", "user_id", "gps_km"].includes(c));
 const UPSERT = `

@@ -4,8 +4,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, makeStyles } from "../components/ui";
 import { duration, fmtKm, fyLabel, fyOf, parseISO, round1, todayISO, weekStartISO } from "../lib/dates";
 import { Logbook, Profile } from "../lib/api";
-import { discardTracking, finishTracking, getTracking, resumeIfNeeded, Tracking } from "../lib/tracking";
-import { getOpenLogbooks, listTrips, sync, SyncResult, Trip } from "../lib/trips";
+import { autoHousekeeping, discardToSort, endTripToSort, getAutoSettings, sortAsPrivate } from "../lib/auto";
+import { checkAutoStop, discardTracking, finishTracking, getTracking, resumeIfNeeded, Tracking } from "../lib/tracking";
+import { AutoTrip, getOpenLogbooks, getToSort, listTrips, sync, SyncResult, Trip } from "../lib/trips";
 import { useColors } from "../theme";
 
 type Props = {
@@ -16,9 +17,11 @@ type Props = {
   onSaveGps: (t: Tracking) => void;
   onEdit: (trip: Trip) => void;
   onSignOut: () => void;
+  onSettings: () => void;
+  onSortBusiness: (a: AutoTrip) => void;
 };
 
-export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSaveGps, onEdit, onSignOut }: Props) {
+export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSaveGps, onEdit, onSignOut, onSettings, onSortBusiness }: Props) {
   const c = useColors();
   const st = makeStyles(c);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -27,11 +30,15 @@ export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSav
   const [refreshing, setRefreshing] = useState(false);
   const [logbooks, setLogbooks] = useState<Logbook[]>([]);
   const [busy, setBusy] = useState(false);
+  const [toSort, setToSort] = useState<AutoTrip[]>([]);
+  const [autoOn, setAutoOn] = useState(false);
   const [, tick] = useState(0);
 
   const loadLocal = useCallback(async () => {
     setTrips(await listTrips(profile.id));
     setTracking(await getTracking());
+    setToSort((await getToSort(profile.id)).slice().reverse());
+    setAutoOn((await getAutoSettings()).enabled);
   }, [profile.id]);
 
   const doSync = useCallback(async () => {
@@ -45,6 +52,7 @@ export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSav
     loadLocal();
     doSync();
     resumeIfNeeded().catch(() => {});
+    autoHousekeeping().catch(() => {});
     const sub = AppState.addEventListener("change", (s) => { if (s === "active") { loadLocal(); doSync(); } });
     return () => sub.remove();
   }, [loadLocal, doSync]);
@@ -52,9 +60,15 @@ export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSav
   // Refresh the live GPS figure every 2 seconds while a trip is running.
   useEffect(() => {
     if (tracking?.status !== "tracking") return;
-    const id = setInterval(async () => { setTracking(await getTracking()); tick((n) => n + 1); }, 2000);
+    const id = setInterval(async () => {
+      await checkAutoStop().catch(() => {});
+      const t = await getTracking();
+      setTracking(t);
+      if (!t) loadLocal();
+      tick((n) => n + 1);
+    }, 2000);
     return () => clearInterval(id);
-  }, [tracking?.status]);
+  }, [tracking?.status, loadLocal]);
 
   const fy = fyOf(todayISO());
   const stats = useMemo(() => {
@@ -66,14 +80,29 @@ export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSav
 
   const finish = async () => {
     setBusy(true);
+    if (tracking?.auto) {
+      await endTripToSort();
+      await loadLocal();
+      setBusy(false);
+      return;
+    }
     const t = await finishTracking();
     setBusy(false);
     if (t) onSaveGps(t);
   };
-  const discard = () =>
-    Alert.alert("Discard this GPS trip?", "The distance measured so far won't be saved.", [
+  const quickPrivate = async (a: AutoTrip) => {
+    try { await sortAsPrivate(profile.id, a); await loadLocal(); doSync(); }
+    catch (e) { Alert.alert("Can't save yet", e instanceof Error ? e.message : "Try again."); }
+  };
+  const dropSort = (a: AutoTrip) =>
+    Alert.alert("Not a drive in your car?", "This removes it. Use it for bus, train or passenger trips.", [
       { text: "Keep it", style: "cancel" },
-      { text: "Discard", style: "destructive", onPress: async () => { await discardTracking(); setTracking(null); } },
+      { text: "Remove", style: "destructive", onPress: async () => { await discardToSort(profile.id, a); await loadLocal(); } },
+    ]);
+  const discard = () =>
+    Alert.alert(tracking?.auto ? "Discard this drive?" : "Discard this GPS trip?", "The distance measured so far won't be saved.", [
+      { text: "Keep it", style: "cancel" },
+      { text: "Discard", style: "destructive", onPress: async () => { const wasAuto = tracking?.auto; await discardTracking(); setTracking(null); if (wasAuto) autoHousekeeping().catch(() => {}); } },
     ]);
 
   const syncText = !syncState ? "Syncing…"
@@ -89,6 +118,7 @@ export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSav
           <Text style={st.muted}>{profile.full_name}</Text>
         </View>
         <View style={{ alignItems: "flex-end", gap: 6 }}>
+          <Pressable onPress={onSettings} hitSlop={10}><Text style={[st.muted, { fontWeight: "600" }]}>Settings</Text></Pressable>
           <Pressable onPress={onAddCar} hitSlop={10}><Text style={[st.muted, { fontWeight: "600" }]}>+ Add car</Text></Pressable>
           <Pressable onPress={onSignOut} hitSlop={10}><Text style={[st.muted, { fontWeight: "600" }]}>Sign out</Text></Pressable>
         </View>
@@ -121,7 +151,7 @@ export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSav
         <View style={{ marginTop: 14, borderRadius: 16, borderWidth: 2, borderColor: c.hivis, backgroundColor: c.surface, padding: 16 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: tracking.status === "tracking" && tracking.lastFixAt ? c.ok : c.muted }} />
-            <Text style={{ fontWeight: "700", color: c.ink }}>{tracking.status === "tracking" ? "Tracking with GPS" : "GPS trip ready to save"}</Text>
+            <Text style={{ fontWeight: "700", color: c.ink }}>{tracking.status !== "tracking" ? "GPS trip ready to save" : tracking.auto ? (tracking.via === "carplay" ? "Tracking from CarPlay" : "Drive detected") : "Tracking with GPS"}</Text>
           </View>
           <Text style={{ fontSize: 52, fontWeight: "800", color: c.ink, marginTop: 6, fontVariant: ["tabular-nums"] }}>
             {fmtKm(tracking.meters / 1000)} <Text style={{ fontSize: 22, color: c.muted }}>km</Text>
@@ -133,7 +163,11 @@ export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSav
               : " drive. Add the job details and save it."}
           </Text>
           {tracking.status === "tracking" ? (
-            <Text style={[st.muted, { marginTop: 8 }]}>You can lock your phone or use other apps. Tracking keeps going until you finish.</Text>
+            <Text style={[st.muted, { marginTop: 8 }]}>
+              {tracking.auto
+                ? "It ends by itself once you've been parked for 5 minutes, then waits under Trips to sort."
+                : "You can lock your phone or use other apps. Tracking keeps going until you finish."}
+            </Text>
           ) : null}
           <View style={{ flexDirection: "row", gap: 10, marginTop: 14, alignItems: "center" }}>
             <Button title="Discard" kind="danger" onPress={discard} />
@@ -150,6 +184,46 @@ export default function HomeScreen({ profile, onLog, onStartGps, onAddCar, onSav
           <View style={{ flex: 1 }}><Button title="Start GPS trip" onPress={onStartGps} /></View>
         </View>
       )}
+      {!tracking ? (
+        <Pressable onPress={onSettings}>
+          <Text style={[st.muted, { marginTop: 8, marginLeft: 2 }]}>
+            {autoOn ? "Drive detection is on. Drives start and stop by themselves." : "Turn on drive detection in Settings to track without tapping Start."}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {toSort.length ? (
+        <View style={{ marginTop: 20 }}>
+          <Text style={[st.h2, { marginBottom: 4 }]}>Trips to sort ({toSort.length})</Text>
+          <Text style={[st.muted, { marginBottom: 8 }]}>Only on your phone until you sort them.</Text>
+          {toSort.map((a) => {
+            const d = new Date(a.startedAt);
+            return (
+              <View key={a.id} style={[st.card, { padding: 12, marginBottom: 8 }]}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: "700", color: c.ink }}>
+                      {d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })},{" "}
+                      {d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" })}
+                    </Text>
+                    <Text style={st.muted}>
+                      {duration(a.endedAt - a.startedAt)}
+                      {a.start_odo != null ? `, odometer ≈ ${fmtKm(a.start_odo)} → ${fmtKm(a.end_odo ?? a.start_odo)}` : ", no odometer yet"}
+                      {a.tag === "business" ? ". Marked business on CarPlay" : ""}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 18, fontWeight: "700", color: c.ink }}>{fmtKm(a.meters / 1000)} <Text style={[st.muted, { fontSize: 13 }]}>km</Text></Text>
+                </View>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 10, alignItems: "center" }}>
+                  <View style={{ flex: 1 }}><Button title="Business" onPress={() => onSortBusiness(a)} /></View>
+                  <View style={{ flex: 1 }}><Button title="Private" kind="dark" onPress={() => quickPrivate(a)} /></View>
+                  <Button title="✕" kind="danger" onPress={() => dropSort(a)} />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
 
       <Text style={[st.h2, { marginTop: 24, marginBottom: 8 }]}>Recent trips</Text>
     </View>

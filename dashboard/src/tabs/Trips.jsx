@@ -156,6 +156,7 @@ export default function Trips({ staff, vehicles, settings, reloadShared }) {
                     <td>{t.start_odo != null && t.end_odo != null ? `${km1(t.start_odo)} → ${km1(t.end_odo)}` : <span className="tag warn">None</span>}</td>
                     <td>
                       <span className="tag">{sourceLabel(t.source)}</span>
+                      {t.auto_detected && <span className="tag">Auto</span>}
                       {isEdited(t) && <span className="tag warn">Edited</span>}
                       {t.deleted && <span className="tag">Deleted</span>}
                     </td>
