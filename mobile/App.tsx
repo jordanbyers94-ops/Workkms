@@ -38,7 +38,7 @@ export default function App() {
       }
     })();
     return onSignedOut(() => {
-      setNotice("Your session ended (PIN changed, account updated, or it's been 60 days). Sign in again. Your saved trips are still on this phone.");
+      setNotice("Your session ended (PIN changed, Work kms access switched off, or it's been 60 days). Sign in again. Your saved trips are still on this phone.");
       setProfile(null);
       setRoute({ name: "home" });
     });

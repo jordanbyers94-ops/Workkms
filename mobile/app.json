@@ -6,22 +6,32 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "au.com.ausairelectrical.workkms",
+      "bundleIdentifier": "tracking.workms",
       "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
-        "UIBackgroundModes": ["location"],
+        "UIBackgroundModes": [
+          "location"
+        ],
         "NSLocationWhenInUseUsageDescription": "Work kms uses your location to measure the distance of work trips you start.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Work kms keeps measuring a work trip you started while your phone is locked or you're using other apps. It stops as soon as you finish the trip."
       }
     },
     "android": {
-      "package": "au.com.ausairelectrical.workkms",
+      "package": "tracking.workms",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "plugins": [
@@ -34,6 +44,11 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d7d6008a-64b2-462a-9767-350b9fb4233b"
+      }
+    }
   }
 }
